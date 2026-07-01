@@ -1,0 +1,34 @@
+# Build outputs
+Debug/
+Release/
+*.exe
+*.obj
+*.pdb
+*.ilk
+*.idb
+*.log
+
+# Visual Studio / VS Code
+.vs/
+.vscode/*
+!.vscode/tasks.json
+!.vscode/launch.json
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# C/C++ / MSVC
+*.ipch
+*.aps
+*.tlog
+*.cache
+
+# vcpkg / package manager
+vcpkg/buildtrees/
+vcpkg/downloads/
+vcpkg/packages/
+vcpkg/installed/*/
+!vcpkg/installed/x64-windows-static/
+!vcpkg/installed/x64-windows-static/include/
+!vcpkg/installed/x64-windows-static/lib/

@@ -1,0 +1,81 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "Prepare Debug dir",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-Command",
+                "New-Item -ItemType Directory -Force -Path '${workspaceFolder}\\Debug'"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "type": "shell",
+            "label": "Prepare Release dir",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-Command",
+                "New-Item -ItemType Directory -Force -Path '${workspaceFolder}\\Release'"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "type": "cppbuild",
+            "label": "Build Debug (Pgo.exe)",
+            "dependsOn": "Prepare Debug dir",
+            "command": "cl.exe",
+            "args": [
+                "/Zi",
+                "/Od",
+                "/MTd",
+                "/EHsc",
+                "/I",
+                "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\include",
+                "/I",
+                "${workspaceFolder}\\Include",
+                "${workspaceFolder}\\Source\\main.cpp",
+                "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\debug\\lib\\argon2.lib",
+                "/Fo${workspaceFolder}\\Debug\\",
+                "/Fe${workspaceFolder}\\Debug\\Pgo.exe",
+                "/link",
+                "/DEBUG",
+                "/PDB:${workspaceFolder}\\Debug\\Pgo.pdb"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": ["$msCompile"],
+            "group": "build",
+            "detail": "Builds debug binary with debug CRT and symbols"
+        },
+        {
+            "type": "cppbuild",
+            "label": "Build Release (Pgo.exe)",
+            "dependsOn": "Prepare Release dir",
+            "command": "cl.exe",
+            "args": [
+                "/O2",
+                "/MT",
+                "/EHsc",
+                "/I",
+                "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\include",
+                "/I",
+                "${workspaceFolder}\\Include",
+                "${workspaceFolder}\\Source\\main.cpp",
+                "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\lib\\argon2.lib",
+                "/Fo${workspaceFolder}\\Release\\",
+                "/Fe${workspaceFolder}\\Release\\Pgo.exe"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": ["$msCompile"],
+            "group": "build",
+            "detail": "Builds release binary with optimizations"
+        }
+    ]
+}
