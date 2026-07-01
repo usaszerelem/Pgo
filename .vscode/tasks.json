@@ -8,7 +8,7 @@
             "args": [
                 "-NoProfile",
                 "-Command",
-                "New-Item -ItemType Directory -Force -Path '${workspaceFolder}\\Debug','${workspaceFolder}\\PgoEngine\\Debug'"
+                "New-Item -ItemType Directory -Force -Path '${workspaceFolder}\\PgoEngine\\Debug'"
             ],
             "problemMatcher": []
         },
@@ -19,7 +19,7 @@
             "args": [
                 "-NoProfile",
                 "-Command",
-                "New-Item -ItemType Directory -Force -Path '${workspaceFolder}\\Release','${workspaceFolder}\\PgoEngine\\Release'"
+                "New-Item -ItemType Directory -Force -Path '${workspaceFolder}\\PgoEngine\\Release'"
             ],
             "problemMatcher": []
         },
@@ -27,20 +27,11 @@
             "type": "shell",
             "label": "Build Debug (PgoEngine.lib)",
             "dependsOn": "Prepare Debug dir",
-            "command": "cl.exe",
+            "command": "powershell",
             "args": [
-                "/c",
-                "/Zi",
-                "/Od",
-                "/MTd",
-                "/EHsc",
-                "/I",
-                "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\include",
-                "/I",
-                "${workspaceFolder}\\PgoEngine\\Include",
-                "${workspaceFolder}\\PgoEngine\\Source\\PgoEngine.cpp",
-                "/Fd${workspaceFolder}\\PgoEngine\\Debug\\vc140.pdb",
-                "/Fo${workspaceFolder}\\PgoEngine\\Debug\\PgoEngine.obj"
+                "-NoProfile",
+                "-Command",
+                "cl.exe /c /Zi /Od /MTd /EHsc /I 'C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\include' /I '${workspaceFolder}\\PgoEngine\\Include' '${workspaceFolder}\\PgoEngine\\Source\\PgoEngine.cpp' '/Fd${workspaceFolder}\\PgoEngine\\Debug\\vc140.pdb' '/Fo${workspaceFolder}\\PgoEngine\\Debug\\PgoEngine.obj'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; lib.exe '/OUT:${workspaceFolder}\\PgoEngine\\Debug\\PgoEngine.lib' '${workspaceFolder}\\PgoEngine\\Debug\\PgoEngine.obj'"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -54,18 +45,11 @@
             "type": "shell",
             "label": "Build Release (PgoEngine.lib)",
             "dependsOn": "Prepare Release dir",
-            "command": "cl.exe",
+            "command": "powershell",
             "args": [
-                "/c",
-                "/O2",
-                "/MT",
-                "/EHsc",
-                "/I",
-                "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\include",
-                "/I",
-                "${workspaceFolder}\\PgoEngine\\Include",
-                "${workspaceFolder}\\PgoEngine\\Source\\PgoEngine.cpp",
-                "/Fo${workspaceFolder}\\PgoEngine\\Release\\PgoEngine.obj"
+                "-NoProfile",
+                "-Command",
+                "cl.exe /c /O2 /MT /EHsc /I 'C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\include' /I '${workspaceFolder}\\PgoEngine\\Include' '${workspaceFolder}\\PgoEngine\\Source\\PgoEngine.cpp' '/Fo${workspaceFolder}\\PgoEngine\\Release\\PgoEngine.obj'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; lib.exe '/OUT:${workspaceFolder}\\PgoEngine\\Release\\PgoEngine.lib' '${workspaceFolder}\\PgoEngine\\Release\\PgoEngine.obj'"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -79,14 +63,36 @@
             "type": "shell",
             "label": "Build PgoEngine",
             "dependsOn": [
-                "Create Debug (PgoEngine.lib)",
-                "Create Release (PgoEngine.lib)"
+                "Build Debug (PgoEngine.lib)",
+                "Build Release (PgoEngine.lib)"
             ],
             "problemMatcher": [],
             "group": {
                 "kind": "build"
             },
             "detail": "Builds the PgoEngine debug and release libraries"
+        },
+        {
+            "type": "shell",
+            "label": "Prepare CLI Debug dir",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-Command",
+                "New-Item -ItemType Directory -Force -Path '${workspaceFolder}\\PgoCli\\Debug'"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "type": "shell",
+            "label": "Prepare CLI Release dir",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-Command",
+                "New-Item -ItemType Directory -Force -Path '${workspaceFolder}\\PgoCli\\Release'"
+            ],
+            "problemMatcher": []
         },
         {
             "type": "shell",
@@ -118,29 +124,33 @@
         },
         {
             "type": "cppbuild",
-            "label": "Build Debug (Pgo.exe)",
-            "dependsOn": ["Prepare Debug dir", "Create Debug (PgoEngine.lib)"],
+            "label": "Build Debug (PgoCli.exe)",
+            "dependsOn": [
+                "Prepare Debug dir",
+                "Prepare CLI Debug dir",
+                "Build Debug (PgoEngine.lib)"
+            ],
             "command": "cl.exe",
             "args": [
                 "/Zi",
-                "/Fd${workspaceFolder}\\Debug\\vc140.pdb",
+                "/Fd${workspaceFolder}\\PgoCli\\Debug\\vc140.pdb",
                 "/Od",
                 "/MTd",
                 "/EHsc",
                 "/I",
                 "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\include",
                 "/I",
-                "${workspaceFolder}\\Include",
+                "${workspaceFolder}\\PgoCli\\Include",
                 "/I",
                 "${workspaceFolder}\\PgoEngine\\Include",
-                "${workspaceFolder}\\Source\\main.cpp",
+                "${workspaceFolder}\\PgoCli\\Source\\main.cpp",
                 "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\debug\\lib\\argon2.lib",
                 "${workspaceFolder}\\PgoEngine\\Debug\\PgoEngine.lib",
-                "/Fo${workspaceFolder}\\Debug\\",
-                "/Fe${workspaceFolder}\\Debug\\Pgo.exe",
+                "/Fo${workspaceFolder}\\PgoCli\\Debug\\",
+                "/Fe${workspaceFolder}\\PgoCli\\Debug\\PgoCli.exe",
                 "/link",
                 "/DEBUG",
-                "/PDB:${workspaceFolder}\\Debug\\Pgo.pdb"
+                "/PDB:${workspaceFolder}\\PgoCli\\Debug\\PgoCli.pdb"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -151,10 +161,11 @@
         },
         {
             "type": "cppbuild",
-            "label": "Build Release (Pgo.exe)",
+            "label": "Build Release (PgoCli.exe)",
             "dependsOn": [
                 "Prepare Release dir",
-                "Create Release (PgoEngine.lib)"
+                "Prepare CLI Release dir",
+                "Build Release (PgoEngine.lib)"
             ],
             "command": "cl.exe",
             "args": [
@@ -164,14 +175,14 @@
                 "/I",
                 "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\include",
                 "/I",
-                "${workspaceFolder}\\Include",
+                "${workspaceFolder}\\PgoCli\\Include",
                 "/I",
                 "${workspaceFolder}\\PgoEngine\\Include",
-                "${workspaceFolder}\\Source\\main.cpp",
+                "${workspaceFolder}\\PgoCli\\Source\\main.cpp",
                 "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\lib\\argon2.lib",
                 "${workspaceFolder}\\PgoEngine\\Release\\PgoEngine.lib",
-                "/Fo${workspaceFolder}\\Release\\",
-                "/Fe${workspaceFolder}\\Release\\Pgo.exe"
+                "/Fo${workspaceFolder}\\PgoCli\\Release\\",
+                "/Fe${workspaceFolder}\\PgoCli\\Release\\PgoCli.exe"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
