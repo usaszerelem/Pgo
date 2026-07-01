@@ -30,6 +30,7 @@
             "command": "cl.exe",
             "args": [
                 "/Zi",
+                "/Fd${workspaceFolder}\\Debug\\vc140.pdb",
                 "/Od",
                 "/MTd",
                 "/EHsc",

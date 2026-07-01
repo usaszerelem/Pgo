@@ -10,7 +10,7 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "console": "internalConsole",
+            "console": "externalTerminal",
             "preLaunchTask": "Build Debug (Pgo.exe)"
         },
         {
@@ -22,7 +22,7 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "console": "internalConsole",
+            "console": "externalTerminal",
             "preLaunchTask": "Build Release (Pgo.exe)"
         }
     ]
