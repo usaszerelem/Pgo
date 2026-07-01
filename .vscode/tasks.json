@@ -8,7 +8,7 @@
             "args": [
                 "-NoProfile",
                 "-Command",
-                "New-Item -ItemType Directory -Force -Path '${workspaceFolder}\\Debug'"
+                "New-Item -ItemType Directory -Force -Path '${workspaceFolder}\\Debug','${workspaceFolder}\\PgoEngine\\Debug'"
             ],
             "problemMatcher": []
         },
@@ -19,14 +19,107 @@
             "args": [
                 "-NoProfile",
                 "-Command",
-                "New-Item -ItemType Directory -Force -Path '${workspaceFolder}\\Release'"
+                "New-Item -ItemType Directory -Force -Path '${workspaceFolder}\\Release','${workspaceFolder}\\PgoEngine\\Release'"
             ],
+            "problemMatcher": []
+        },
+        {
+            "type": "shell",
+            "label": "Build Debug (PgoEngine.lib)",
+            "dependsOn": "Prepare Debug dir",
+            "command": "cl.exe",
+            "args": [
+                "/c",
+                "/Zi",
+                "/Od",
+                "/MTd",
+                "/EHsc",
+                "/I",
+                "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\include",
+                "/I",
+                "${workspaceFolder}\\PgoEngine\\Include",
+                "${workspaceFolder}\\PgoEngine\\Source\\PgoEngine.cpp",
+                "/Fd${workspaceFolder}\\PgoEngine\\Debug\\vc140.pdb",
+                "/Fo${workspaceFolder}\\PgoEngine\\Debug\\PgoEngine.obj"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": ["$msCompile"],
+            "group": {
+                "kind": "build"
+            }
+        },
+        {
+            "type": "shell",
+            "label": "Build Release (PgoEngine.lib)",
+            "dependsOn": "Prepare Release dir",
+            "command": "cl.exe",
+            "args": [
+                "/c",
+                "/O2",
+                "/MT",
+                "/EHsc",
+                "/I",
+                "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\include",
+                "/I",
+                "${workspaceFolder}\\PgoEngine\\Include",
+                "${workspaceFolder}\\PgoEngine\\Source\\PgoEngine.cpp",
+                "/Fo${workspaceFolder}\\PgoEngine\\Release\\PgoEngine.obj"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": ["$msCompile"],
+            "group": {
+                "kind": "build"
+            }
+        },
+        {
+            "type": "shell",
+            "label": "Build PgoEngine",
+            "dependsOn": [
+                "Create Debug (PgoEngine.lib)",
+                "Create Release (PgoEngine.lib)"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "kind": "build"
+            },
+            "detail": "Builds the PgoEngine debug and release libraries"
+        },
+        {
+            "type": "shell",
+            "label": "Create Debug (PgoEngine.lib)",
+            "dependsOn": "Build Debug (PgoEngine.lib)",
+            "command": "lib.exe",
+            "args": [
+                "/OUT:${workspaceFolder}\\PgoEngine\\Debug\\PgoEngine.lib",
+                "${workspaceFolder}\\PgoEngine\\Debug\\PgoEngine.obj"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "type": "shell",
+            "label": "Create Release (PgoEngine.lib)",
+            "dependsOn": "Build Release (PgoEngine.lib)",
+            "command": "lib.exe",
+            "args": [
+                "/OUT:${workspaceFolder}\\PgoEngine\\Release\\PgoEngine.lib",
+                "${workspaceFolder}\\PgoEngine\\Release\\PgoEngine.obj"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
             "problemMatcher": []
         },
         {
             "type": "cppbuild",
             "label": "Build Debug (Pgo.exe)",
-            "dependsOn": "Prepare Debug dir",
+            "dependsOn": ["Prepare Debug dir", "Create Debug (PgoEngine.lib)"],
             "command": "cl.exe",
             "args": [
                 "/Zi",
@@ -38,8 +131,11 @@
                 "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\include",
                 "/I",
                 "${workspaceFolder}\\Include",
+                "/I",
+                "${workspaceFolder}\\PgoEngine\\Include",
                 "${workspaceFolder}\\Source\\main.cpp",
                 "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\debug\\lib\\argon2.lib",
+                "${workspaceFolder}\\PgoEngine\\Debug\\PgoEngine.lib",
                 "/Fo${workspaceFolder}\\Debug\\",
                 "/Fe${workspaceFolder}\\Debug\\Pgo.exe",
                 "/link",
@@ -56,7 +152,10 @@
         {
             "type": "cppbuild",
             "label": "Build Release (Pgo.exe)",
-            "dependsOn": "Prepare Release dir",
+            "dependsOn": [
+                "Prepare Release dir",
+                "Create Release (PgoEngine.lib)"
+            ],
             "command": "cl.exe",
             "args": [
                 "/O2",
@@ -66,8 +165,11 @@
                 "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\include",
                 "/I",
                 "${workspaceFolder}\\Include",
+                "/I",
+                "${workspaceFolder}\\PgoEngine\\Include",
                 "${workspaceFolder}\\Source\\main.cpp",
                 "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\lib\\argon2.lib",
+                "${workspaceFolder}\\PgoEngine\\Release\\PgoEngine.lib",
                 "/Fo${workspaceFolder}\\Release\\",
                 "/Fe${workspaceFolder}\\Release\\Pgo.exe"
             ],
