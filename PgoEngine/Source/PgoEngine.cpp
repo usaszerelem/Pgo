@@ -12,8 +12,16 @@ extern "C" {
 #include <argon2.h>
 }
 
+#include <windows.h>
+#include <bcrypt.h>
+
+#pragma comment(lib, "bcrypt.lib")
+
 namespace pgo {
 namespace {
+
+constexpr std::size_t kSaltSize = 16;
+constexpr std::size_t kChecksumSize = 32;
 
 struct Sha256Hash {
     std::array<unsigned char, 32> bytes{};
@@ -116,7 +124,34 @@ Sha256Hash sha256(const std::vector<unsigned char>& data) {
     return result;
 }
 
-std::vector<unsigned char> deriveKey(const EngineConfig& config) {
+bool generateRandomBytes(std::vector<unsigned char>& bytes) {
+    if (bytes.empty()) {
+        return true;
+    }
+
+    return BCryptGenRandom(
+        nullptr,
+        bytes.data(),
+        static_cast<ULONG>(bytes.size()),
+        BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0;
+}
+
+std::string generateSalt() {
+    std::vector<unsigned char> bytes(kSaltSize);
+    if (!generateRandomBytes(bytes)) {
+        throw std::runtime_error("failed to generate salt");
+    }
+    return std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+}
+
+std::string readSalt(const std::vector<unsigned char>& payload) {
+    if (payload.size() < kSaltSize) {
+        throw std::runtime_error("payload too small for salt");
+    }
+    return std::string(payload.begin(), payload.begin() + kSaltSize);
+}
+
+std::vector<unsigned char> deriveKey(const EngineConfig& config, const std::string& salt) {
     std::vector<unsigned char> out(32);
     const int rc = argon2id_hash_raw(
         static_cast<unsigned int>(config.tCost),
@@ -124,8 +159,8 @@ std::vector<unsigned char> deriveKey(const EngineConfig& config) {
         static_cast<unsigned int>(config.parallelism),
         config.password.data(),
         config.password.size(),
-        config.salt.data(),
-        config.salt.size(),
+        salt.data(),
+        salt.size(),
         out.data(),
         out.size());
     if (rc != ARGON2_OK) {
@@ -156,20 +191,27 @@ void writeFileBytes(const std::string& path, const std::vector<unsigned char>& d
     output.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
 }
 
-std::vector<unsigned char> buildPayload(const std::vector<unsigned char>& plaintext, const std::vector<unsigned char>& key) {
-    std::vector<unsigned char> payload = plaintext;
+std::vector<unsigned char> buildPayload(const std::vector<unsigned char>& plaintext, const std::vector<unsigned char>& key, const std::string& salt) {
+    std::vector<unsigned char> payload;
+    payload.reserve(kSaltSize + kChecksumSize + plaintext.size());
+    payload.insert(payload.end(), salt.begin(), salt.end());
+
     auto checksum = sha256(plaintext);
-    applyObfuscation(payload, key);
-    payload.insert(payload.begin(), checksum.bytes.begin(), checksum.bytes.end());
+    payload.insert(payload.end(), checksum.bytes.begin(), checksum.bytes.end());
+
+    std::vector<unsigned char> body = plaintext;
+    applyObfuscation(body, key);
+    payload.insert(payload.end(), body.begin(), body.end());
     return payload;
 }
 
 std::vector<unsigned char> parsePayload(const std::vector<unsigned char>& payload, const std::vector<unsigned char>& key) {
-    if (payload.size() < 32) {
+    if (payload.size() < kSaltSize + kChecksumSize) {
         throw std::runtime_error("payload too small");
     }
-    std::vector<unsigned char> header(payload.begin(), payload.begin() + 32);
-    std::vector<unsigned char> body(payload.begin() + 32, payload.end());
+
+    std::vector<unsigned char> header(payload.begin() + kSaltSize, payload.begin() + kSaltSize + kChecksumSize);
+    std::vector<unsigned char> body(payload.begin() + kSaltSize + kChecksumSize, payload.end());
     applyObfuscation(body, key);
     auto checksum = sha256(body);
     std::vector<unsigned char> expected(checksum.bytes.begin(), checksum.bytes.end());
@@ -184,8 +226,9 @@ std::vector<unsigned char> parsePayload(const std::vector<unsigned char>& payloa
 bool obfuscateFile(const std::string& inputPath, const std::string& outputPath, const EngineConfig& config, std::string& error) {
     try {
         auto input = readFileBytes(inputPath);
-        auto key = deriveKey(config);
-        auto payload = buildPayload(input, key);
+        const auto salt = generateSalt();
+        auto key = deriveKey(config, salt);
+        auto payload = buildPayload(input, key, salt);
         writeFileBytes(outputPath, payload);
         return true;
     } catch (const std::exception& ex) {
@@ -197,7 +240,8 @@ bool obfuscateFile(const std::string& inputPath, const std::string& outputPath, 
 bool reverseFile(const std::string& inputPath, const std::string& outputPath, const EngineConfig& config, std::string& error) {
     try {
         auto input = readFileBytes(inputPath);
-        auto key = deriveKey(config);
+        const auto salt = readSalt(input);
+        auto key = deriveKey(config, salt);
         auto payload = parsePayload(input, key);
         writeFileBytes(outputPath, payload);
         return true;

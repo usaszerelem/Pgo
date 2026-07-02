@@ -145,6 +145,7 @@
                 "${workspaceFolder}\\PgoEngine\\Include",
                 "${workspaceFolder}\\PgoCli\\Source\\main.cpp",
                 "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\debug\\lib\\argon2.lib",
+                "bcrypt.lib",
                 "${workspaceFolder}\\PgoEngine\\Debug\\PgoEngine.lib",
                 "/Fo${workspaceFolder}\\PgoCli\\Debug\\",
                 "/Fe${workspaceFolder}\\PgoCli\\Debug\\PgoCli.exe",
@@ -180,6 +181,7 @@
                 "${workspaceFolder}\\PgoEngine\\Include",
                 "${workspaceFolder}\\PgoCli\\Source\\main.cpp",
                 "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\lib\\argon2.lib",
+                "bcrypt.lib",
                 "${workspaceFolder}\\PgoEngine\\Release\\PgoEngine.lib",
                 "/Fo${workspaceFolder}\\PgoCli\\Release\\",
                 "/Fe${workspaceFolder}\\PgoCli\\Release\\PgoCli.exe"

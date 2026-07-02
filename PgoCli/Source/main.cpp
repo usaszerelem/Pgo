@@ -11,7 +11,6 @@ namespace {
 
 struct CommandLineOptions {
     std::string password;
-    std::string salt;
     std::string inputPath;
     std::string outputPath;
     std::string mode;
@@ -19,7 +18,7 @@ struct CommandLineOptions {
 
 void printUsage(const char* programName) {
     std::cout << "Usage: " << programName
-              << " -input=<path> -output=<path> -mode=<obfuscate|reverse> [-password=value] [-salt=value] [-help]\n";
+              << " -input=<path> -output=<path> -mode=<obfuscate|reverse> [-password=value] [-help]\n";
 }
 
 CommandLineOptions parseCommandLine(int argc, char* argv[]) {
@@ -33,7 +32,7 @@ CommandLineOptions parseCommandLine(int argc, char* argv[]) {
             std::exit(0);
         }
 
-        if (arg == "-input" || arg == "-output" || arg == "-mode" || arg == "-password" || arg == "-salt") {
+        if (arg == "-input" || arg == "-output" || arg == "-mode" || arg == "-password") {
             if (i + 1 >= argc) {
                 std::cerr << "Missing value for argument: " << arg << "\n";
                 continue;
@@ -48,8 +47,6 @@ CommandLineOptions parseCommandLine(int argc, char* argv[]) {
                 options.mode = value;
             } else if (arg == "-password") {
                 options.password = value;
-            } else if (arg == "-salt") {
-                options.salt = value;
             }
             continue;
         }
@@ -65,8 +62,6 @@ CommandLineOptions parseCommandLine(int argc, char* argv[]) {
 
         if (key == "password") {
             options.password = value;
-        } else if (key == "salt") {
-            options.salt = value;
         } else if (key == "input") {
             options.inputPath = value;
         } else if (key == "output") {
@@ -109,12 +104,6 @@ int main(int argc, char* argv[]) {
 
     pgo::EngineConfig config;
     config.password = options.password.empty() ? "SuperSecretPassword123" : options.password;
-    config.salt = options.salt.empty() ? "pixiedust" : options.salt;
-    if (config.salt.size() < 8) {
-        while (config.salt.size() < 8) {
-            config.salt.append("0");
-        }
-    }
 
 #ifdef _DEBUG
     config.tCost = 2;
