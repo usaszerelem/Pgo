@@ -31,6 +31,18 @@ pgo::EngineConfig makeFastConfig(const std::string& password) {
     return config;
 }
 
+// PgoEngine streams input in fixed-size internal chunks (see PgoEngine.cpp), so a
+// multi-megabyte payload is used here (rather than hardcoding that chunk size in the
+// test) to exercise the chunk-boundary handling without coupling the test to it.
+std::string makeLargeContent(std::size_t size) {
+    std::string content;
+    content.reserve(size);
+    for (std::size_t i = 0; i < size; ++i) {
+        content.push_back(static_cast<char>('a' + (i % 26)));
+    }
+    return content;
+}
+
 class PgoEngineTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -160,6 +172,68 @@ TEST_F(PgoEngineTest, ReverseFailsWhenInputFileMissing) {
     std::string error;
 
     EXPECT_FALSE(pgo::reverseFile(path("does_not_exist.bin").string(), path("output.txt").string(), config, error));
+    EXPECT_FALSE(error.empty());
+}
+
+TEST_F(PgoEngineTest, RoundTripHandlesMultiChunkFile) {
+    const std::string plaintext = makeLargeContent(5 * 1024 * 1024); // spans many internal chunks
+    writeFile(path("input.bin"), plaintext);
+
+    auto config = makeFastConfig("password");
+    std::string error;
+
+    ASSERT_TRUE(pgo::obfuscateFile(path("input.bin").string(), path("encrypted.bin").string(), config, error)) << error;
+    ASSERT_TRUE(pgo::reverseFile(path("encrypted.bin").string(), path("output.bin").string(), config, error)) << error;
+
+    EXPECT_EQ(readFile(path("output.bin")), plaintext);
+}
+
+TEST_F(PgoEngineTest, ReverseFailsWhenMultiChunkPayloadIsMissingItsFinalChunk) {
+    const std::string plaintext = makeLargeContent(1 * 1024 * 1024);
+    writeFile(path("input.bin"), plaintext);
+
+    auto config = makeFastConfig("password");
+    std::string error;
+    ASSERT_TRUE(pgo::obfuscateFile(path("input.bin").string(), path("encrypted.bin").string(), config, error)) << error;
+
+    std::string encrypted = readFile(path("encrypted.bin"));
+    ASSERT_GT(encrypted.size(), std::size_t{1024});
+    // Drop the trailing 1 KiB so the real final chunk (tagged TAG_FINAL) never arrives.
+    writeFile(path("truncated.bin"), encrypted.substr(0, encrypted.size() - 1024));
+
+    EXPECT_FALSE(pgo::reverseFile(path("truncated.bin").string(), path("output.bin").string(), config, error));
+    EXPECT_FALSE(error.empty());
+}
+
+TEST_F(PgoEngineTest, ReverseFailsWhenAnEarlyChunkOfMultiChunkPayloadIsTampered) {
+    const std::string plaintext = makeLargeContent(1 * 1024 * 1024);
+    writeFile(path("input.bin"), plaintext);
+
+    auto config = makeFastConfig("password");
+    std::string error;
+    ASSERT_TRUE(pgo::obfuscateFile(path("input.bin").string(), path("encrypted.bin").string(), config, error)) << error;
+
+    std::string encrypted = readFile(path("encrypted.bin"));
+    ASSERT_GT(encrypted.size(), std::size_t{100});
+    encrypted[100] ^= 0x01; // Flip a bit well inside the first chunk, far from the last.
+    writeFile(path("tampered.bin"), encrypted);
+
+    EXPECT_FALSE(pgo::reverseFile(path("tampered.bin").string(), path("output.bin").string(), config, error));
+    EXPECT_FALSE(error.empty());
+}
+
+TEST_F(PgoEngineTest, ReverseFailsWhenDataFollowsTheFinalChunk) {
+    writeFile(path("input.txt"), "some content");
+
+    auto config = makeFastConfig("password");
+    std::string error;
+    ASSERT_TRUE(pgo::obfuscateFile(path("input.txt").string(), path("encrypted.bin").string(), config, error)) << error;
+
+    std::string encrypted = readFile(path("encrypted.bin"));
+    encrypted += "trailing garbage appended after the authenticated stream";
+    writeFile(path("with_trailer.bin"), encrypted);
+
+    EXPECT_FALSE(pgo::reverseFile(path("with_trailer.bin").string(), path("output.txt").string(), config, error));
     EXPECT_FALSE(error.empty());
 }
 

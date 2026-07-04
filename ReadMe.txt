@@ -12,7 +12,7 @@ Obfuscate using external file for password:
 -input=./Test/Sample.txt
 -output=./Test/Sample.dat
 -mode=obfuscate
--passwordfile=./Test/Bible.txt
+-passwordfile=./Test/LargeFile.txt
 -passwordoffset=100
 -passwordlength=10
 
@@ -20,6 +20,11 @@ Reverse using external file for password:
 -input=./Test/Sample.dat
 -output=./Test/Sample2.txt
 -mode=reverse
--passwordfile=./Test/Bible.txt
+-passwordfile=./Test/LargeFile.txt
 -passwordoffset=100
 -passwordlength=10
+
+Run tests any time with:
+
+cmake --build build/debug
+ctest --test-dir build/debug --output-on-failure
