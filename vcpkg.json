@@ -2,6 +2,7 @@
   "name": "pgo",
   "version": "1.0.0",
   "dependencies": [
-    "argon2"
+    "libsodium",
+    "gtest"
   ]
 }

@@ -32,3 +32,7 @@ vcpkg/packages/
 vcpkg/installed/
 vcpkg/vcpkg
 vcpkg/vcpkg.exe
+
+TestFiles/
+CmdLine.txt
+ReadMe.txt

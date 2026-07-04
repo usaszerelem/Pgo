@@ -52,6 +52,23 @@ Omitting `--target` builds everything in the tree (both projects), since the roo
 - `build/<debug|release>/PgoEngine/libPgoEngine.a` (Mac/Linux) or `PgoEngine.lib` (Windows)
 - `build/<debug|release>/PgoCli/PgoCli` (Mac/Linux) or `PgoCli.exe` (Windows)
 
+## Running tests
+
+GoogleTest-based automated tests are built by default (`PGO_BUILD_TESTS`, on by default —
+configure with `-DPGO_BUILD_TESTS=OFF` to skip them). `vcpkg.json` pulls in `gtest`
+automatically, same as `libsodium`.
+
+- `PgoEngineTests` exercises `pgo::obfuscateFile`/`reverseFile` directly (round-trips,
+  wrong password, tampered/truncated payloads, missing files).
+- `PgoCliTests` exercises `PgoCli`'s argument-parsing logic, which lives in the
+  `PgoCliLib` static library (`PgoCli/Include/CommandLine.h`, `PgoCli/Source/CommandLine.cpp`)
+  so it can be linked into a test binary without pulling in `main()`.
+
+```
+cmake --build build/debug
+ctest --test-dir build/debug --output-on-failure
+```
+
 ## Building via VS Code
 
 Use **Terminal -> Run Task**, or press **Cmd+Shift+B** (Mac) / **Ctrl+Shift+B** (Windows) to get a picker with all four build tasks:

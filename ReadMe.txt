@@ -2,13 +2,11 @@ Obfuscate:
 -input=./Test/Sample.txt
 -output=./Test/Sample.dat
 -mode=obfuscate
--password=HelloWorld
 
 Reverse:
 -input=./Test/Sampledat
 -output=./Test/Sample3.txt
 -mode=reverse
--password=HelloWorld
 
 Obfuscate using external file for password:
 -input=./Test/Sample.txt

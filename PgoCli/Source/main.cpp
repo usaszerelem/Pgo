@@ -6,199 +6,152 @@
 #include <string>
 #include <vector>
 
+#include "CommandLine.h"
 #include "PgoEngine.h"
+
+extern "C" {
+#include <sodium.h>
+}
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <termios.h>
+#include <unistd.h>
+#endif
+
+/**
+ * @file main.cpp
+ * @brief Command-line entry point for PgoCli, a front end for pgo::obfuscateFile /
+ *        pgo::reverseFile (see PgoEngine.h).
+ *
+ * Supports two argument syntaxes for every option ("-key value" and "-key=value"),
+ * expanding arguments from a file via -argfile (see CommandLine.h). The password itself
+ * is never accepted as a literal CLI argument (that would leak it into shell history and
+ * to anyone running `ps`); it is instead either sliced out of a file (-passwordfile[/
+ * -passwordoffset/-passwordlength]) or entered interactively with echo disabled (see
+ * promptForPassword). Password strings are scrubbed from memory (see ScopedZeroString)
+ * once no longer needed.
+ */
+
+using pgocli::CommandLineOptions;
+using pgocli::expandArgs;
+using pgocli::extractPasswordFromFile;
+using pgocli::parseCommandLine;
+using pgocli::printUsage;
 
 namespace {
 
-constexpr const char* kDefaultArgFileName = "CmdLine.txt";
+/**
+ * @brief RAII guard that zeroes a std::string's contents when it goes out of scope.
+ *
+ * Used to scrub password material from memory as soon as it is no longer needed,
+ * including on exception-unwind paths, rather than leaving it to linger in freed heap
+ * memory until overwritten by something else.
+ */
+class ScopedZeroString {
+public:
+    explicit ScopedZeroString(std::string& value) : value_(value) {}
+    ~ScopedZeroString() {
+        if (!value_.empty()) {
+            sodium_memzero(&value_[0], value_.size());
+        }
+    }
 
-struct CommandLineOptions {
-    std::string password;
-    std::string inputPath;
-    std::string outputPath;
-    std::string mode;
-    std::string passwordFilePath;
-    uint64_t passwordOffset = 0;
-    uint64_t passwordLength = 0;
-    bool passwordLengthSpecified = false;
+    ScopedZeroString(const ScopedZeroString&) = delete;
+    ScopedZeroString& operator=(const ScopedZeroString&) = delete;
+
+private:
+    std::string& value_;
 };
 
-void printUsage(const char* programName) {
-    std::cout << "Usage: " << programName
-              << " -mode=<obfuscate|reverse> -input=<path> -output=<path>"
-                 " (-password=value | -passwordfile=<path> [-passwordoffset=N] [-passwordlength=N])"
-                 " [-argfile[=path]] [-help]\n"
-              << "  -argfile reads additional arguments from a file (default: " << kDefaultArgFileName << ")\n"
-              << "  -passwordfile extracts the password as raw bytes from another file\n"
-              << "  -passwordoffset byte offset into -passwordfile to start reading (default: 0)\n"
-              << "  -passwordlength number of bytes to read from -passwordfile (default: rest of file)\n";
-}
-
-// Reads `length` raw bytes starting at `offset` from `path` to use as the password.
-// If lengthSpecified is false, reads to the end of the file.
-std::string extractPasswordFromFile(const std::string& path,
-                                     uint64_t offset,
-                                     uint64_t length,
-                                     bool lengthSpecified,
-                                     std::string& error) {
-    std::ifstream file(path, std::ios::binary);
-    if (!file) {
-        error = "Could not open password file: " + path;
-        return {};
+/**
+ * @brief RAII guard that disables terminal echo for its lifetime and restores the
+ *        original mode on destruction (including on exception-unwind paths), so a
+ *        password typed at promptForPassword's prompt is not displayed on screen.
+ */
+#ifdef _WIN32
+class ScopedEchoDisabled {
+public:
+    ScopedEchoDisabled() : handle_(GetStdHandle(STD_INPUT_HANDLE)) {
+        GetConsoleMode(handle_, &originalMode_);
+        SetConsoleMode(handle_, originalMode_ & ~ENABLE_ECHO_INPUT);
+    }
+    ~ScopedEchoDisabled() {
+        SetConsoleMode(handle_, originalMode_);
     }
 
-    file.seekg(0, std::ios::end);
-    const auto fileSize = static_cast<uint64_t>(file.tellg());
+    ScopedEchoDisabled(const ScopedEchoDisabled&) = delete;
+    ScopedEchoDisabled& operator=(const ScopedEchoDisabled&) = delete;
 
-    if (offset > fileSize) {
-        error = "Password offset is beyond the end of file: " + path;
-        return {};
+private:
+    HANDLE handle_;
+    DWORD originalMode_ = 0;
+};
+#else
+class ScopedEchoDisabled {
+public:
+    ScopedEchoDisabled() {
+        tcgetattr(STDIN_FILENO, &original_);
+        termios noEcho = original_;
+        noEcho.c_lflag &= ~static_cast<tcflag_t>(ECHO);
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &noEcho);
     }
 
-    const uint64_t available = fileSize - offset;
-    const uint64_t readLength = lengthSpecified ? length : available;
-
-    if (readLength > available) {
-        error = "Password file is too short for the requested offset/length: " + path;
-        return {};
+    ~ScopedEchoDisabled() {
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_);
     }
 
-    std::string buffer(readLength, '\0');
-    file.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
-    file.read(&buffer[0], static_cast<std::streamsize>(readLength));
+    ScopedEchoDisabled(const ScopedEchoDisabled&) = delete;
+    ScopedEchoDisabled& operator=(const ScopedEchoDisabled&) = delete;
 
-    if (static_cast<uint64_t>(file.gcount()) != readLength) {
-        error = "Failed to read password bytes from file: " + path;
-        return {};
-    }
-
-    return buffer;
-}
-
-// Reads whitespace-separated tokens (e.g. "-input=foo") from an arg file.
-std::vector<std::string> readArgFile(const std::string& path) {
-    std::vector<std::string> tokens;
-    std::ifstream file(path);
-    if (!file) {
-        std::cerr << "Could not open argument file: " << path << "\n";
-        return tokens;
-    }
-
-    std::string token;
-    while (file >> token) {
-        tokens.push_back(token);
-    }
-
-    return tokens;
-}
-
-// Expands "-argfile"/"-argfile=<path>" into the tokens read from that file, in place.
-std::vector<std::string> expandArgs(int argc, char* argv[]) {
-    std::vector<std::string> expanded;
-    bool argFileRequested = false;
-
-    for (int i = 1; i < argc; ++i) {
-        const std::string arg = argv[i];
-
-        if (arg == "-argfile" || arg.rfind("-argfile=", 0) == 0) {
-            const std::string path = arg == "-argfile" ? kDefaultArgFileName : arg.substr(std::string("-argfile=").size());
-            const std::vector<std::string> fileArgs = readArgFile(path);
-            expanded.insert(expanded.end(), fileArgs.begin(), fileArgs.end());
-            argFileRequested = true;
-            continue;
-        }
-
-        expanded.push_back(arg);
-    }
-
-#if defined(_DEBUG) || !defined(NDEBUG)
-    // Debug convenience: silently pick up CmdLine.txt if present and not already loaded,
-    // so real command-line arguments still take precedence.
-    if (!argFileRequested) {
-        std::ifstream defaultFile(kDefaultArgFileName);
-        
-        if (defaultFile) {
-            const std::vector<std::string> fileArgs = readArgFile(kDefaultArgFileName);
-            expanded.insert(expanded.begin(), fileArgs.begin(), fileArgs.end());
-        }
-    }
+private:
+    termios original_{};
+};
 #endif
 
-    return expanded;
-}
+/**
+ * @brief Prompts on stdout and reads a password from stdin without echoing it.
+ *
+ * If stdin is not an interactive terminal (e.g. piped input in a test/automation
+ * context), the echo-disabling is simply a no-op and the line is read normally.
+ *
+ * @param prompt Text to display before reading input (e.g. "Password: ").
+ * @return The line entered by the user, not including the trailing newline.
+ */
+std::string promptForPassword(const std::string& prompt) {
+    std::cout << prompt;
+    std::cout.flush();
 
-CommandLineOptions parseCommandLine(const std::vector<std::string>& args, const char* programName) {
-    CommandLineOptions options;
-
-    for (std::size_t i = 0; i < args.size(); ++i) {
-        const std::string& arg = args[i];
-
-        if (arg == "-help") {
-            printUsage(programName);
-            std::exit(0);
-        }
-
-        if (arg == "-input" || arg == "-output" || arg == "-mode" || arg == "-password" ||
-            arg == "-passwordfile" || arg == "-passwordoffset" || arg == "-passwordlength") {
-            if (i + 1 >= args.size()) {
-                std::cerr << "Missing value for argument: " << arg << "\n";
-                continue;
-            }
-
-            const std::string value = args[++i];
-            if (arg == "-input") {
-                options.inputPath = value;
-            } else if (arg == "-output") {
-                options.outputPath = value;
-            } else if (arg == "-mode") {
-                options.mode = value;
-            } else if (arg == "-password") {
-                options.password = value;
-            } else if (arg == "-passwordfile") {
-                options.passwordFilePath = value;
-            } else if (arg == "-passwordoffset") {
-                options.passwordOffset = std::stoull(value);
-            } else if (arg == "-passwordlength") {
-                options.passwordLength = std::stoull(value);
-                options.passwordLengthSpecified = true;
-            }
-            continue;
-        }
-
-        if (arg.rfind("-", 0) != 0 || arg.find('=') == std::string::npos) {
-            std::cerr << "Invalid argument format: " << arg << ". Use -command=value.\n";
-            continue;
-        }
-
-        const std::size_t separator = arg.find('=');
-        const std::string key = arg.substr(1, separator - 1);
-        const std::string value = arg.substr(separator + 1);
-
-        if (key == "password") {
-            options.password = value;
-        } else if (key == "input") {
-            options.inputPath = value;
-        } else if (key == "output") {
-            options.outputPath = value;
-        } else if (key == "mode") {
-            options.mode = value;
-        } else if (key == "passwordfile") {
-            options.passwordFilePath = value;
-        } else if (key == "passwordoffset") {
-            options.passwordOffset = std::stoull(value);
-        } else if (key == "passwordlength") {
-            options.passwordLength = std::stoull(value);
-            options.passwordLengthSpecified = true;
-        } else {
-            std::cerr << "Unknown argument: " << key << "\n";
-        }
+    std::string password;
+    {
+        ScopedEchoDisabled noEcho;
+        std::getline(std::cin, password);
     }
 
-    return options;
+    std::cout << std::endl;
+
+    return password;
 }
 
 } // namespace
 
+/**
+ * @brief Program entry point: parses arguments and runs pgo::obfuscateFile/reverseFile.
+ *
+ * Validation order: required options present -> password obtained (extracted from
+ * -passwordfile, or entered interactively if that was not given) -> mode is a
+ * recognized value -> input/output paths differ. Any failure along the way throws
+ * std::invalid_argument, which is caught below to print usage and the specific error,
+ * then exit with status 1.
+ *
+ * Argon2id cost parameters (EngineConfig::tCost/mCost) are lower in debug builds so
+ * that manual testing and debugging isn't slowed down by the full production cost.
+ *
+ * @param argc Argument count.
+ * @param argv Argument vector; argv[0] is the program path.
+ * @return 0 on success, 1 if an error occurred.
+ */
 int main(int argc, char* argv[]) {
 
     int nRet = 0;
@@ -207,23 +160,19 @@ int main(int argc, char* argv[]) {
     {
         const std::vector<std::string> args = expandArgs(argc, argv);
         CommandLineOptions options = parseCommandLine(args, argv[0]);
+        ScopedZeroString zeroOptionsPassword(options.password);
 
         if (options.inputPath.empty() || options.outputPath.empty() || options.mode.empty()) {
             throw std::invalid_argument("Input, output, and mode are required.");
         }
 
-        const bool passwordFromLiteral = !options.password.empty();
-        const bool passwordFromFile = !options.passwordFilePath.empty();
+        if (options.passwordFilePath.empty()) {
+            options.password = promptForPassword("Password: ");
 
-        if (passwordFromLiteral && passwordFromFile) {
-            throw std::invalid_argument("Specify either -password or -passwordfile, not both.");
-        }
-
-        if (!passwordFromLiteral && !passwordFromFile) {
-            throw std::invalid_argument("Either -password or -passwordfile is required.");
-        }
-
-        if (passwordFromFile) {
+            if (options.password.empty()) {
+                throw std::invalid_argument("Password must not be empty.");
+            }
+        } else {
             std::string extractError;
             options.password = extractPasswordFromFile(options.passwordFilePath,
                                                          options.passwordOffset,
@@ -240,7 +189,7 @@ int main(int argc, char* argv[]) {
         }
 
         std::string mode = options.mode;
-    
+
         std::transform(mode.begin(), mode.end(), mode.begin(), [](unsigned char c) {
                 return static_cast<char>(std::tolower(c));
             });
@@ -255,15 +204,14 @@ int main(int argc, char* argv[]) {
 
         pgo::EngineConfig config;
         config.password = options.password;
+        ScopedZeroString zeroConfigPassword(config.password);
 
 #if defined(_DEBUG) || !defined(NDEBUG)
         config.tCost = 2;
         config.mCost = 1u << 16;
-        config.parallelism = 1;
 #else
         config.tCost = 4;
         config.mCost = 1u << 18;
-        config.parallelism = 2;
 #endif
 
         std::string error;
@@ -287,7 +235,7 @@ int main(int argc, char* argv[]) {
         std::cerr << e.what() << '\n';
         nRet = 1;
     }
-    
+
 #if defined(_DEBUG) || !defined(NDEBUG)
     std::cout << "Press Enter to exit..." << std::endl;
     std::cin.get(); // Wait for user input before closing the console window.

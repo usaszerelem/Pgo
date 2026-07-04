@@ -4,21 +4,77 @@
 #include <string>
 #include <vector>
 
+/**
+ * @file PgoEngine.h
+ * @brief Public API for password-based authenticated file encryption.
+ *
+ * The engine encrypts a file with a key derived from a password (via Argon2id) and an
+ * AEAD cipher (XChaCha20-Poly1305), so that the output cannot be decrypted or tampered
+ * with undetected without knowing the password. See PgoEngine.cpp for the on-disk
+ * payload layout and the implementation details of key derivation and encryption.
+ */
+
 namespace pgo {
 
+/**
+ * @brief Parameters controlling how the encryption key is derived from a password.
+ *
+ * tCost and mCost are passed to libsodium's crypto_pwhash (Argon2id) to control how
+ * expensive key derivation is, which in turn controls how expensive an offline
+ * password-guessing attack against an encrypted file would be.
+ *
+ * @var EngineConfig::password
+ *   The password used to derive the encryption key. Required.
+ * @var EngineConfig::salt
+ *   Unused by obfuscateFile/reverseFile; each call generates or reads its own salt
+ *   from the file itself. Reserved for callers that need to track it separately.
+ * @var EngineConfig::tCost
+ *   Argon2id time cost (number of iterations/passes over memory).
+ * @var EngineConfig::mCost
+ *   Argon2id memory cost, in KiB (Argon2 convention). Converted to bytes internally
+ *   before being passed to crypto_pwhash.
+ */
 struct EngineConfig {
     std::string password;
     std::string salt;
     uint32_t tCost = 2;
     uint32_t mCost = 1u << 16;
-    uint32_t parallelism = 1;
 };
 
+/**
+ * @brief Encrypts a file with a key derived from @p config.password.
+ *
+ * Reads the entirety of @p inputPath into memory, derives a key using Argon2id with a
+ * freshly generated random salt, encrypts the contents with XChaCha20-Poly1305, and
+ * writes `salt | nonce | ciphertext+tag` to @p outputPath.
+ *
+ * @param inputPath  Path to the plaintext file to encrypt.
+ * @param outputPath Path to write the encrypted output to (overwritten if it exists).
+ * @param config     Password and Argon2id cost parameters to use for key derivation.
+ * @param error      Set to a human-readable message if this function returns false.
+ * @return true on success, false on failure (see @p error for the reason).
+ */
 bool obfuscateFile(const std::string& inputPath,
                    const std::string& outputPath,
                    const EngineConfig& config,
                    std::string& error);
 
+/**
+ * @brief Decrypts a file previously produced by obfuscateFile.
+ *
+ * Reads the salt from the start of @p inputPath, re-derives the key using
+ * @p config.password, and decrypts and authenticates the remaining bytes. Since
+ * decryption uses an AEAD cipher, this fails safely (returns false) rather than
+ * silently producing garbage output when the password is wrong or the file has been
+ * corrupted or tampered with.
+ *
+ * @param inputPath  Path to a file previously written by obfuscateFile.
+ * @param outputPath Path to write the recovered plaintext to (overwritten if it exists).
+ * @param config     Must contain the same password and Argon2id cost parameters that
+ *                   were used to produce @p inputPath.
+ * @param error      Set to a human-readable message if this function returns false.
+ * @return true on success, false on failure (see @p error for the reason).
+ */
 bool reverseFile(const std::string& inputPath,
                  const std::string& outputPath,
                  const EngineConfig& config,
