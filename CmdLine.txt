@@ -1,0 +1,6 @@
+-input=./Test/Sample.dat
+-output=./Test/Sample2.txt
+-mode=reverse
+-passwordfile=./Test/Bible.txt
+-passwordoffset=100
+-passwordlength=10

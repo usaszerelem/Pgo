@@ -12,10 +12,13 @@ extern "C" {
 #include <argon2.h>
 }
 
+#ifdef _WIN32
 #include <windows.h>
 #include <bcrypt.h>
-
 #pragma comment(lib, "bcrypt.lib")
+#else
+#include <sys/random.h>
+#endif
 
 namespace pgo {
 namespace {
@@ -61,9 +64,11 @@ std::array<unsigned int, 8> initialState() {
 
 void transform(std::array<unsigned int, 8>& state, const std::array<unsigned int, 64>& block) {
     std::array<unsigned int, 64> w{};
+
     for (size_t i = 0; i < 16; ++i) {
         w[i] = block[i];
     }
+
     for (size_t i = 16; i < 64; ++i) {
         const unsigned int s0 = ((w[i - 15] >> 7) | (w[i - 15] << 25)) ^ ((w[i - 15] >> 18) | (w[i - 15] << 14)) ^ (w[i - 15] >> 3);
         const unsigned int s1 = ((w[i - 2] >> 17) | (w[i - 2] << 15)) ^ ((w[i - 2] >> 19) | (w[i - 2] << 13)) ^ (w[i - 2] >> 10);
@@ -71,6 +76,7 @@ void transform(std::array<unsigned int, 8>& state, const std::array<unsigned int
     }
 
     std::array<unsigned int, 8> working = state;
+
     for (size_t i = 0; i < 64; ++i) {
         const unsigned int ch = (working[4] & working[5]) ^ (~working[4] & working[6]);
         const unsigned int maj = (working[0] & working[1]) ^ (working[0] & working[2]) ^ (working[1] & working[2]);
@@ -78,6 +84,7 @@ void transform(std::array<unsigned int, 8>& state, const std::array<unsigned int
         const unsigned int sum1 = ((working[4] >> 6) | (working[4] << 26)) ^ ((working[4] >> 11) | (working[4] << 21)) ^ ((working[4] >> 25) | (working[4] << 7));
         const unsigned int temp1 = working[7] + sum1 + ch + k[i] + w[i];
         const unsigned int temp2 = sum0 + maj;
+
         working[7] = working[6];
         working[6] = working[5];
         working[5] = working[4];
@@ -97,23 +104,29 @@ Sha256Hash sha256(const std::vector<unsigned char>& data) {
     std::array<unsigned int, 8> state = initialState();
     std::vector<unsigned char> message = data;
     message.push_back(0x80);
+
     while ((message.size() * 8) % 512 != 448) {
         message.push_back(0x00);
     }
+
     uint64_t bitLength = static_cast<uint64_t>(data.size()) * 8;
+
     for (int i = 7; i >= 0; --i) {
         message.push_back(static_cast<unsigned char>((bitLength >> (i * 8)) & 0xFF));
     }
 
     for (size_t offset = 0; offset < message.size(); offset += 64) {
         std::array<unsigned int, 64> block{};
+
         for (size_t i = 0; i < 64; ++i) {
             block[i] = (i + offset < message.size()) ? static_cast<unsigned int>(message[offset + i]) : 0;
         }
+
         transform(state, block);
     }
 
     Sha256Hash result{};
+
     for (size_t i = 0; i < 8; ++i) {
         uint32_t value = state[i];
         result.bytes[i * 4 + 0] = static_cast<unsigned char>((value >> 24) & 0xFF);
@@ -125,34 +138,44 @@ Sha256Hash sha256(const std::vector<unsigned char>& data) {
 }
 
 bool generateRandomBytes(std::vector<unsigned char>& bytes) {
+
     if (bytes.empty()) {
         return true;
     }
 
+#ifdef _WIN32
     return BCryptGenRandom(
         nullptr,
         bytes.data(),
         static_cast<ULONG>(bytes.size()),
         BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0;
+#else
+    return getentropy(bytes.data(), bytes.size()) == 0;
+#endif
 }
 
 std::string generateSalt() {
     std::vector<unsigned char> bytes(kSaltSize);
+
     if (!generateRandomBytes(bytes)) {
         throw std::runtime_error("failed to generate salt");
     }
+
     return std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size());
 }
 
 std::string readSalt(const std::vector<unsigned char>& payload) {
+
     if (payload.size() < kSaltSize) {
         throw std::runtime_error("payload too small for salt");
     }
+
     return std::string(payload.begin(), payload.begin() + kSaltSize);
 }
 
 std::vector<unsigned char> deriveKey(const EngineConfig& config, const std::string& salt) {
     std::vector<unsigned char> out(32);
+
     const int rc = argon2id_hash_raw(
         static_cast<unsigned int>(config.tCost),
         static_cast<unsigned int>(config.mCost),
@@ -163,13 +186,16 @@ std::vector<unsigned char> deriveKey(const EngineConfig& config, const std::stri
         salt.size(),
         out.data(),
         out.size());
+
     if (rc != ARGON2_OK) {
         throw std::runtime_error("argon2id_hash_raw failed");
     }
+
     return out;
 }
 
 void applyObfuscation(std::vector<unsigned char>& buffer, const std::vector<unsigned char>& key) {
+
     for (size_t i = 0; i < buffer.size(); ++i) {
         buffer[i] = static_cast<unsigned char>(buffer[i] ^ key[i % key.size()] ^ static_cast<unsigned char>(i + 1));
     }
@@ -177,17 +203,21 @@ void applyObfuscation(std::vector<unsigned char>& buffer, const std::vector<unsi
 
 std::vector<unsigned char> readFileBytes(const std::string& path) {
     std::ifstream input(path, std::ios::binary);
+
     if (!input) {
         throw std::runtime_error("unable to open input file");
     }
+
     return std::vector<unsigned char>(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
 void writeFileBytes(const std::string& path, const std::vector<unsigned char>& data) {
     std::ofstream output(path, std::ios::binary | std::ios::trunc);
+
     if (!output) {
         throw std::runtime_error("unable to create output file");
     }
+
     output.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
 }
 
@@ -202,10 +232,12 @@ std::vector<unsigned char> buildPayload(const std::vector<unsigned char>& plaint
     std::vector<unsigned char> body = plaintext;
     applyObfuscation(body, key);
     payload.insert(payload.end(), body.begin(), body.end());
+
     return payload;
 }
 
 std::vector<unsigned char> parsePayload(const std::vector<unsigned char>& payload, const std::vector<unsigned char>& key) {
+
     if (payload.size() < kSaltSize + kChecksumSize) {
         throw std::runtime_error("payload too small");
     }
@@ -214,41 +246,50 @@ std::vector<unsigned char> parsePayload(const std::vector<unsigned char>& payloa
     std::vector<unsigned char> body(payload.begin() + kSaltSize + kChecksumSize, payload.end());
     applyObfuscation(body, key);
     auto checksum = sha256(body);
+
     std::vector<unsigned char> expected(checksum.bytes.begin(), checksum.bytes.end());
+
     if (expected != header) {
         throw std::runtime_error("integrity check failed");
     }
+
     return body;
 }
 
 } // namespace
 
 bool obfuscateFile(const std::string& inputPath, const std::string& outputPath, const EngineConfig& config, std::string& error) {
+    bool bSuccess = true;
+
     try {
         auto input = readFileBytes(inputPath);
         const auto salt = generateSalt();
         auto key = deriveKey(config, salt);
         auto payload = buildPayload(input, key, salt);
         writeFileBytes(outputPath, payload);
-        return true;
     } catch (const std::exception& ex) {
         error = ex.what();
-        return false;
+        bSuccess = false;
     }
+
+    return bSuccess;
 }
 
 bool reverseFile(const std::string& inputPath, const std::string& outputPath, const EngineConfig& config, std::string& error) {
+    bool bSuccess = true;
+
     try {
         auto input = readFileBytes(inputPath);
         const auto salt = readSalt(input);
         auto key = deriveKey(config, salt);
         auto payload = parsePayload(input, key);
         writeFileBytes(outputPath, payload);
-        return true;
     } catch (const std::exception& ex) {
         error = ex.what();
-        return false;
+        bSuccess = false;
     }
+
+    return bSuccess;
 }
 
 } // namespace pgo

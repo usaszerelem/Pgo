@@ -3,106 +3,23 @@
     "tasks": [
         {
             "type": "shell",
-            "label": "Prepare Debug dir",
-            "command": "powershell",
+            "label": "CMake Configure (Debug)",
+            "command": "cmake",
             "args": [
-                "-NoProfile",
-                "-Command",
-                "New-Item -ItemType Directory -Force -Path '${workspaceFolder}\\PgoEngine\\Debug'"
+                "-S", "${workspaceFolder}",
+                "-B", "${workspaceFolder}/build/debug",
+                "-DCMAKE_TOOLCHAIN_FILE=${workspaceFolder}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+                "-DCMAKE_BUILD_TYPE=Debug"
             ],
-            "problemMatcher": []
-        },
-        {
-            "type": "shell",
-            "label": "Prepare Release dir",
-            "command": "powershell",
-            "args": [
-                "-NoProfile",
-                "-Command",
-                "New-Item -ItemType Directory -Force -Path '${workspaceFolder}\\PgoEngine\\Release'"
-            ],
-            "problemMatcher": []
-        },
-        {
-            "type": "shell",
-            "label": "Build Debug (PgoEngine.lib)",
-            "dependsOn": "Prepare Debug dir",
-            "command": "powershell",
-            "args": [
-                "-NoProfile",
-                "-Command",
-                "cl.exe /c /Zi /Od /MTd /EHsc /I 'C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\include' /I '${workspaceFolder}\\PgoEngine\\Include' '${workspaceFolder}\\PgoEngine\\Source\\PgoEngine.cpp' '/Fd${workspaceFolder}\\PgoEngine\\Debug\\vc140.pdb' '/Fo${workspaceFolder}\\PgoEngine\\Debug\\PgoEngine.obj'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; lib.exe '/OUT:${workspaceFolder}\\PgoEngine\\Debug\\PgoEngine.lib' '${workspaceFolder}\\PgoEngine\\Debug\\PgoEngine.obj'"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
+            "windows": {
+                "args": [
+                    "-S", "${workspaceFolder}",
+                    "-B", "${workspaceFolder}/build/debug",
+                    "-G", "NMake Makefiles",
+                    "-DCMAKE_TOOLCHAIN_FILE=${workspaceFolder}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+                    "-DCMAKE_BUILD_TYPE=Debug"
+                ]
             },
-            "problemMatcher": ["$msCompile"],
-            "group": {
-                "kind": "build"
-            }
-        },
-        {
-            "type": "shell",
-            "label": "Build Release (PgoEngine.lib)",
-            "dependsOn": "Prepare Release dir",
-            "command": "powershell",
-            "args": [
-                "-NoProfile",
-                "-Command",
-                "cl.exe /c /O2 /MT /EHsc /I 'C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\include' /I '${workspaceFolder}\\PgoEngine\\Include' '${workspaceFolder}\\PgoEngine\\Source\\PgoEngine.cpp' '/Fo${workspaceFolder}\\PgoEngine\\Release\\PgoEngine.obj'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; lib.exe '/OUT:${workspaceFolder}\\PgoEngine\\Release\\PgoEngine.lib' '${workspaceFolder}\\PgoEngine\\Release\\PgoEngine.obj'"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "problemMatcher": ["$msCompile"],
-            "group": {
-                "kind": "build"
-            }
-        },
-        {
-            "type": "shell",
-            "label": "Build PgoEngine",
-            "dependsOn": [
-                "Build Debug (PgoEngine.lib)",
-                "Build Release (PgoEngine.lib)"
-            ],
-            "problemMatcher": [],
-            "group": {
-                "kind": "build"
-            },
-            "detail": "Builds the PgoEngine debug and release libraries"
-        },
-        {
-            "type": "shell",
-            "label": "Prepare CLI Debug dir",
-            "command": "powershell",
-            "args": [
-                "-NoProfile",
-                "-Command",
-                "New-Item -ItemType Directory -Force -Path '${workspaceFolder}\\PgoCli\\Debug'"
-            ],
-            "problemMatcher": []
-        },
-        {
-            "type": "shell",
-            "label": "Prepare CLI Release dir",
-            "command": "powershell",
-            "args": [
-                "-NoProfile",
-                "-Command",
-                "New-Item -ItemType Directory -Force -Path '${workspaceFolder}\\PgoCli\\Release'"
-            ],
-            "problemMatcher": []
-        },
-        {
-            "type": "shell",
-            "label": "Create Debug (PgoEngine.lib)",
-            "dependsOn": "Build Debug (PgoEngine.lib)",
-            "command": "lib.exe",
-            "args": [
-                "/OUT:${workspaceFolder}\\PgoEngine\\Debug\\PgoEngine.lib",
-                "${workspaceFolder}\\PgoEngine\\Debug\\PgoEngine.obj"
-            ],
             "options": {
                 "cwd": "${workspaceFolder}"
             },
@@ -110,88 +27,105 @@
         },
         {
             "type": "shell",
-            "label": "Create Release (PgoEngine.lib)",
-            "dependsOn": "Build Release (PgoEngine.lib)",
-            "command": "lib.exe",
+            "label": "CMake Configure (Release)",
+            "command": "cmake",
             "args": [
-                "/OUT:${workspaceFolder}\\PgoEngine\\Release\\PgoEngine.lib",
-                "${workspaceFolder}\\PgoEngine\\Release\\PgoEngine.obj"
+                "-S", "${workspaceFolder}",
+                "-B", "${workspaceFolder}/build/release",
+                "-DCMAKE_TOOLCHAIN_FILE=${workspaceFolder}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+                "-DCMAKE_BUILD_TYPE=Release"
             ],
+            "windows": {
+                "args": [
+                    "-S", "${workspaceFolder}",
+                    "-B", "${workspaceFolder}/build/release",
+                    "-G", "NMake Makefiles",
+                    "-DCMAKE_TOOLCHAIN_FILE=${workspaceFolder}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+                    "-DCMAKE_BUILD_TYPE=Release"
+                ]
+            },
             "options": {
                 "cwd": "${workspaceFolder}"
             },
             "problemMatcher": []
         },
         {
-            "type": "cppbuild",
-            "label": "Build Debug (PgoCli.exe)",
-            "dependsOn": [
-                "Prepare Debug dir",
-                "Prepare CLI Debug dir",
-                "Build Debug (PgoEngine.lib)"
-            ],
-            "command": "cl.exe",
+            "type": "shell",
+            "label": "Build Debug (PgoEngine)",
+            "dependsOn": "CMake Configure (Debug)",
+            "command": "cmake",
             "args": [
-                "/Zi",
-                "/Fd${workspaceFolder}\\PgoCli\\Debug\\vc140.pdb",
-                "/Od",
-                "/MTd",
-                "/EHsc",
-                "/I",
-                "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\include",
-                "/I",
-                "${workspaceFolder}\\PgoCli\\Include",
-                "/I",
-                "${workspaceFolder}\\PgoEngine\\Include",
-                "${workspaceFolder}\\PgoCli\\Source\\main.cpp",
-                "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\debug\\lib\\argon2.lib",
-                "bcrypt.lib",
-                "${workspaceFolder}\\PgoEngine\\Debug\\PgoEngine.lib",
-                "/Fo${workspaceFolder}\\PgoCli\\Debug\\",
-                "/Fe${workspaceFolder}\\PgoCli\\Debug\\PgoCli.exe",
-                "/link",
-                "/DEBUG",
-                "/PDB:${workspaceFolder}\\PgoCli\\Debug\\PgoCli.pdb"
+                "--build", "${workspaceFolder}/build/debug",
+                "--target", "PgoEngine"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
             },
-            "problemMatcher": ["$msCompile"],
+            "problemMatcher": ["$gcc"],
+            "windows": {
+                "problemMatcher": ["$msCompile"]
+            },
             "group": "build",
-            "detail": "Builds debug binary with debug CRT and symbols"
+            "detail": "Configures and builds the PgoEngine debug static library via CMake + vcpkg"
         },
         {
-            "type": "cppbuild",
-            "label": "Build Release (PgoCli.exe)",
-            "dependsOn": [
-                "Prepare Release dir",
-                "Prepare CLI Release dir",
-                "Build Release (PgoEngine.lib)"
-            ],
-            "command": "cl.exe",
+            "type": "shell",
+            "label": "Build Release (PgoEngine)",
+            "dependsOn": "CMake Configure (Release)",
+            "command": "cmake",
             "args": [
-                "/O2",
-                "/MT",
-                "/EHsc",
-                "/I",
-                "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\include",
-                "/I",
-                "${workspaceFolder}\\PgoCli\\Include",
-                "/I",
-                "${workspaceFolder}\\PgoEngine\\Include",
-                "${workspaceFolder}\\PgoCli\\Source\\main.cpp",
-                "C:\\Code\\Pgo\\vcpkg\\installed\\x64-windows-static\\lib\\argon2.lib",
-                "bcrypt.lib",
-                "${workspaceFolder}\\PgoEngine\\Release\\PgoEngine.lib",
-                "/Fo${workspaceFolder}\\PgoCli\\Release\\",
-                "/Fe${workspaceFolder}\\PgoCli\\Release\\PgoCli.exe"
+                "--build", "${workspaceFolder}/build/release",
+                "--target", "PgoEngine"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
             },
-            "problemMatcher": ["$msCompile"],
+            "problemMatcher": ["$gcc"],
+            "windows": {
+                "problemMatcher": ["$msCompile"]
+            },
             "group": "build",
-            "detail": "Builds release binary with optimizations"
+            "detail": "Configures and builds the PgoEngine release static library via CMake + vcpkg"
+        },
+        {
+            "type": "shell",
+            "label": "Build Debug (PgoCli)",
+            "dependsOn": "CMake Configure (Debug)",
+            "command": "cmake",
+            "args": [
+                "--build", "${workspaceFolder}/build/debug",
+                "--target", "PgoCli"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": ["$gcc"],
+            "windows": {
+                "problemMatcher": ["$msCompile"]
+            },
+            "group": "build",
+            "detail": "Configures and builds the debug binary via CMake + vcpkg"
+        },
+        {
+            "type": "shell",
+            "label": "Build Release (PgoCli)",
+            "dependsOn": "CMake Configure (Release)",
+            "command": "cmake",
+            "args": [
+                "--build", "${workspaceFolder}/build/release",
+                "--target", "PgoCli"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": ["$gcc"],
+            "windows": {
+                "problemMatcher": ["$msCompile"]
+            },
+            "group": {
+                "kind": "build"
+            },
+            "detail": "Configures and builds the release binary via CMake + vcpkg"
         }
     ]
 }
